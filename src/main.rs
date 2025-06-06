@@ -104,6 +104,7 @@ fn main() {
     // first we need to get the 12 rightmost bits
     // let jump_instruction = 0x1ABC;
     // let jump_address = jump_instruction & 0x0FFF; 
+    // pc = jump_address;
     // so we have the instruction here with the rightmost 12 bits defining the location
     // we do bitwise AND on this value with 0000 1111 1111 1111
     // and we get those bits with 4 leading zeroes
