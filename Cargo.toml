@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 rand = "0.9.1"
+raylib = "5.0.0"
