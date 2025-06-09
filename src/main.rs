@@ -50,6 +50,22 @@ fn check_key_down(key: u8) -> bool {
 fn wait_for_key() -> u8 {todo!()}
 
 
+fn print_before_panic(display: [[u8; 64]; 32]) {
+	let (mut rl_handle, rl_thread) = raylib::init().size(640, 320).build();
+	while !rl_handle.window_should_close() {
+		let mut d = rl_handle.begin_drawing(&rl_thread);
+
+		for (ri, row) in display.iter().enumerate() {
+			for (pi, pixel) in row.iter().enumerate() {
+				d.draw_rectangle((pi*10) as i32, (ri*10) as i32, 10, 10, if *pixel == 1 { Color::BLACK} else {Color::WHITE});
+			}
+		}
+
+    d.clear_background(Color::RAYWHITE);
+    // d.draw_text("Hello from raylib-rs!", 190, 200, 20, Color::DARKGRAY);
+	};
+}
+
 fn main() {
 	let mut rnd_gen = rng();
 	let mut memory: [u8; 4096] = [0; 4096];
@@ -121,6 +137,7 @@ fn main() {
 						// println!("{}", sp);
 						// println!("{}", count_cycles);
 						// println!("{}", instruction);
+						print_before_panic(display);
 						todo!()
 					},
 				}
