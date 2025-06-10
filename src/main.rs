@@ -1,20 +1,7 @@
 use std::{fs::File, io::Read, process};
-
-#[allow(dead_code, unused_mut, unused_variables, unused_assignments)]
-
-
-
-// TODO: add bounds checking
-// display
-// input
-// sound
-// timers decrement
-// let overflow/underflow
-// pc increment in instructions, not the end of the loop
-// check did_underflow, did_overflow
-
 use rand::{Rng, rng};
 use raylib::prelude::*;
+
 
 macro_rules! extract {
 	($instruction:expr, $mask:expr, $offset:expr) => {
@@ -22,31 +9,6 @@ macro_rules! extract {
 	};
 }
 
-
-
-
-fn check_key_down(key: u8) -> bool {
-	todo!()
-}
-
-fn wait_for_key() -> u8 {todo!()}
-
-
-fn print_before_panic(display: [[u8; 64]; 32]) {
-	let (mut rl_handle, rl_thread) = raylib::init().size(640, 320).build();
-	while !rl_handle.window_should_close() {
-		let mut d = rl_handle.begin_drawing(&rl_thread);
-
-		for (ri, row) in display.iter().enumerate() {
-			for (pi, pixel) in row.iter().enumerate() {
-				d.draw_rectangle((pi*10) as i32, (ri*10) as i32, 10, 10, if *pixel == 1 { Color::BLACK} else {Color::WHITE});
-			}
-		}
-
-    d.clear_background(Color::RAYWHITE);
-    // d.draw_text("Hello from raylib-rs!", 190, 200, 20, Color::DARKGRAY);
-	};
-}
 
 fn main() {
 	let mut rnd_gen = rng();
@@ -59,11 +21,11 @@ fn main() {
 	let mut sp: u8 = 0;
 	let mut stack: [u16; 16] = [0; 16];
 	let mut display: [[u8; 64]; 32] = [[0; 64]; 32];
-	let mut file = File::open("sqrt.ch8").unwrap_or_else(|e| {
+	let mut file = File::open("life.ch8").unwrap_or_else(|e| {
 		println!("Error while loading ROM: {}", e);
 		process::exit(1);
 	});
-	file.read(&mut memory[0x200..]).unwrap_or_else(|e| {                   // changed from read_exact to this, because failed to fill the buffer
+	file.read(&mut memory[0x200..]).unwrap_or_else(|e| {
 		println!("Error while moving ROM to memory array: {}", e);
 		process::exit(1);
 	});
@@ -88,12 +50,28 @@ fn main() {
 	for (symbol, mem_cell) in font.iter().zip(memory.iter_mut()) {
 		*mem_cell = *symbol;
 	}
-
-	let mut count_cycles = 0;
-
-	loop {
-
-
+	let mut time_elapsed = 0.0;
+	let (mut rl_handle, rl_thread) = raylib::init().size(640, 320).build();
+	rl_handle.set_target_fps(60);
+	while !rl_handle.window_should_close() {
+		let keys_state: [bool; 16] = [
+			rl_handle.is_key_down(KeyboardKey::KEY_ONE),
+			rl_handle.is_key_down(KeyboardKey::KEY_TWO),
+			rl_handle.is_key_down(KeyboardKey::KEY_THREE),
+			rl_handle.is_key_down(KeyboardKey::KEY_FOUR),
+			rl_handle.is_key_down(KeyboardKey::KEY_Q),
+			rl_handle.is_key_down(KeyboardKey::KEY_W),
+			rl_handle.is_key_down(KeyboardKey::KEY_E),
+			rl_handle.is_key_down(KeyboardKey::KEY_R),
+			rl_handle.is_key_down(KeyboardKey::KEY_A),
+			rl_handle.is_key_down(KeyboardKey::KEY_S),
+			rl_handle.is_key_down(KeyboardKey::KEY_D),
+			rl_handle.is_key_down(KeyboardKey::KEY_F),
+			rl_handle.is_key_down(KeyboardKey::KEY_Z),
+			rl_handle.is_key_down(KeyboardKey::KEY_X),
+			rl_handle.is_key_down(KeyboardKey::KEY_C),
+			rl_handle.is_key_down(KeyboardKey::KEY_V)
+		];
 		let instruction = ((memory[pc as usize] as u16) << 8) | (memory[(pc + 1) as usize] as u16);
 		match instruction & 0xF000 {
 			0x0000 => {
@@ -242,7 +220,7 @@ fn main() {
 				let reg_y = extract!(instruction, 0x00F0, 4);
 				let mut x = registers[reg_x] as usize;
 				let mut y = registers[reg_y] as usize;
-				let mut length = instruction & 0x000F; // number of bytes in the sprite, height
+				let mut length = instruction & 0x000F;
 				let mut addr = mem_addr_reg as usize;
 				registers[15] = 0;
 				while length > 0 {
@@ -266,17 +244,17 @@ fn main() {
 			0xE000 => {
 				match instruction & 0x00FF {
 					0x009E => {
-						let reg = extract!(instruction, 0x0F00, 8);                       //  add key handling
-						if check_key_down(registers[reg]) {
+						let reg = extract!(instruction, 0x0F00, 8);
+						if keys_state[reg] {
 							pc += 2;
-						};
+						}
 						pc += 2;
 					},
 					0x00A1 => {
-						let reg = extract!(instruction, 0x0F00, 8);                      //  add key handling
-						if !check_key_down(registers[reg]) {
+						let reg = extract!(instruction, 0x0F00, 8);
+						if !keys_state[reg] {
 							pc += 2;
-						};
+						}
 						pc += 2;
 					},
 					_ => {
@@ -293,19 +271,20 @@ fn main() {
 						pc += 2;	
 					},
 					0x000A => {
-						let reg = extract!(instruction, 0x0F00, 8);                        // implement await, any key can be pressed and stored
-						let key = wait_for_key();
-						registers[reg] = key;
-						pc += 2;
+						let reg = extract!(instruction, 0x0F00, 8);
+						if let Some((key, _)) = keys_state.iter().enumerate().find(|&(_, &k)| k) {
+							registers[reg] = key as u8;
+							pc += 2;
+						};
 					},
 					0x0015 => {
 						delay_reg = registers[reg];
-						pc += 2;                                                                        // implement delay timer
+						pc += 2;
 					},
 					0x0018 => {
 						sound_reg = registers[reg];
 						pc += 2;
-					},                                                                              // implement sound timer
+					},
 					0x001E => {
 						mem_addr_reg += registers[reg] as u16;
 						pc += 2;
@@ -357,17 +336,28 @@ fn main() {
 				process::exit(1);
 			}
 		};
-
-		count_cycles += 1;
-		println!("{:#04x}", instruction);
-		// break;	
-	}
+		time_elapsed += rl_handle.get_frame_time();
+		if time_elapsed >= 1.0/60.0 {
+			if delay_reg > 0 {
+				delay_reg -= 1;
+			};
+			if sound_reg > 0 {
+				sound_reg -= 1;
+			};
+		}
+		let mut d = rl_handle.begin_drawing(&rl_thread);
+		for (ri, row) in display.iter().enumerate() {
+			for (pi, pixel) in row.iter().enumerate() {
+				d.draw_rectangle((pi*10) as i32, (ri*10) as i32, 10, 10, if *pixel == 1 { Color::BLACK} else {Color::WHITE});
+			}
+		}
+    d.clear_background(Color::RAYWHITE);
+	};
 }
 
 
 #[cfg(test)]
 mod tests {
-	use super::*;
 	#[test]
 	fn test_3xkk_instruction_calculations() {
 		assert_eq!((0x3A28 & 0x0F00) >> 8, 0x000A);
