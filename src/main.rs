@@ -9,38 +9,20 @@ use std::{fs::File, io::Read, process};
 // input
 // sound
 // timers decrement
+// let overflow/underflow
+// pc increment in instructions, not the end of the loop
+// check did_underflow, did_overflow
 
 use rand::{Rng, rng};
 use raylib::prelude::*;
 
 macro_rules! extract {
 	($instruction:expr, $mask:expr, $offset:expr) => {
-		(($instruction & $mask) >> $offset)
+		(($instruction & $mask) >> $offset) as usize
 	};
 }
 
 
-
-
-
-// enum Key {
-// 	ZERO,
-// 	ONE,
-// 	TWO,
-// 	THREE,
-// 	FOUR,
-// 	FIVE,
-// 	SIX,
-// 	SEVEN,
-// 	EIGHT,
-// 	NINE,
-// 	A,
-// 	B,
-// 	C,
-// 	D,
-// 	E,
-// 	F
-// }
 
 
 fn check_key_down(key: u8) -> bool {
@@ -77,9 +59,7 @@ fn main() {
 	let mut sp: u8 = 0;
 	let mut stack: [u16; 16] = [0; 16];
 	let mut display: [[u8; 64]; 32] = [[0; 64]; 32];
-
-
-	let mut file = File::open("test_opcode.ch8").unwrap_or_else(|e| {
+	let mut file = File::open("sqrt.ch8").unwrap_or_else(|e| {
 		println!("Error while loading ROM: {}", e);
 		process::exit(1);
 	});
@@ -87,8 +67,6 @@ fn main() {
 		println!("Error while moving ROM to memory array: {}", e);
 		process::exit(1);
 	});
-
-
 	let font: [u8; 80] = [
 		0xF0, 0x90, 0x90, 0x90, 0xF0,
 		0x20, 0x60, 0x20, 0x20, 0x70,
@@ -125,110 +103,143 @@ fn main() {
 							for pixel in pixel_row {
 								*pixel = 0;
 							}
-						}
+						};
+						pc+=2;
 					},
 					0x00EE => {
 						pc = stack[sp as usize];
+						if sp == 0 {
+							println!("Stack underflow!"); 
+							process::exit(1);
+						}
 						sp -= 1;
+						pc+=2;
 					},
-					_      => {
-						// println!("{:#?}", registers);
-						// println!("{}", pc);
-						// println!("{}", sp);
-						// println!("{}", count_cycles);
-						// println!("{}", instruction);
-						print_before_panic(display);
-						todo!()
+					_ => {
+						println!("Unknown opcode!");
+						process::exit(1);
 					},
 				}
 			},
-			0x1000 => {
-				pc = instruction & 0x0FFF;
-			},
+			0x1000 => pc = instruction & 0x0FFF,
 			0x2000 => {
+				if sp == 15 {
+					println!("Stack overflow!");
+					process::exit(1);
+				}
 				sp += 1;
 				stack[sp as usize] = pc;
 				pc = instruction & 0x0FFF;
 			},
 			0x3000 => {
-				let reg = (instruction & 0x0F00) >> 8;
-				if registers[reg as usize] == (instruction & 0x00FF) as u8 {
+				let reg = extract!(instruction, 0x0F00, 8);
+				if registers[reg] == (instruction & 0x00FF) as u8 {
 					pc += 2;
 				};
+				pc += 2;
 			},
 			0x4000 => {
-				let reg = (instruction & 0x0F00) >> 8;
-					if registers[reg as usize] != (instruction & 0x00FF) as u8 {
+				let reg = extract!(instruction, 0x0F00, 8);
+					if registers[reg] != (instruction & 0x00FF) as u8 {
 					pc += 2;
 				};
+				pc += 2;
 			},
 			0x5000 => {
-				let reg_one = (instruction & 0x0F00) >> 8;
-				let reg_two = (instruction & 0x00F0) >> 4;
-				if registers[reg_one as usize] == registers[reg_two as usize] {
+				let reg_one = extract!(instruction, 0x0F00, 8);
+				let reg_two = extract!(instruction, 0x00F0, 4);
+				if registers[reg_one] == registers[reg_two] {
 					pc += 2;
-				}
+				};
+				pc += 2;
 			},
 			0x6000 => {
 				let reg = extract!(instruction, 0x0F00, 8);
-				registers[reg as usize] = (instruction & 0x00FF) as u8;
+				registers[reg] = (instruction & 0x00FF) as u8;
+				pc += 2;
 			},
 			0x7000 => {
 				let reg = extract!(instruction, 0x0F00, 8);
-				// registers[reg as usize] += (instruction & 0x00FF) as u8;
-				registers[reg as usize] = registers[reg as usize].wrapping_add((instruction & 0x00FF) as u8);
+				registers[reg] = registers[reg].wrapping_add((instruction & 0x00FF) as u8);
+				pc += 2;
 			},
 			0x8000 => {
-				let reg_x = extract!(instruction, 0x0F00, 8) as usize;
-				let reg_y = extract!(instruction, 0x00F0, 4) as usize;
+				let reg_x = extract!(instruction, 0x0F00, 8);
+				let reg_y = extract!(instruction, 0x00F0, 4);
 				match instruction & 0x000F {
-					0x0000 => registers[reg_x] = registers[reg_y],
-					0x0001 => registers[reg_x] = registers[reg_x] | registers[reg_y],
-					0x0002 => registers[reg_x] = registers[reg_x] & registers[reg_y],
-					0x0003 => registers[reg_x] = registers[reg_x] ^ registers[reg_y],
+					0x0000 => {
+						registers[reg_x] = registers[reg_y];
+						pc += 2;
+					}
+						,
+					0x0001 => {
+						registers[reg_x] = registers[reg_x] | registers[reg_y];
+						pc += 2;
+					},
+					0x0002 => {
+						registers[reg_x] = registers[reg_x] & registers[reg_y];
+						pc += 2;
+					},
+					0x0003 => {
+						registers[reg_x] = registers[reg_x] ^ registers[reg_y];
+						pc += 2;	
+					},
 					0x0004 => {
 						let (res, did_overflow) = registers[reg_x].overflowing_add(registers[reg_y]);
 						registers[15] = if did_overflow {1} else {0}; 
 						registers[reg_x] = res;
+						pc += 2;
 					},
 					0x0005 => { 
 						let (res, did_underflow) = registers[reg_x].overflowing_sub(registers[reg_y]);
 						registers[15] = if did_underflow {0} else {1};
 						registers[reg_x] = res;
+						pc += 2;
 					},
 					0x0006 => {
 						registers[15] = if registers[reg_x] & 0b_0000_0001 == 0x0001 {1} else {0};
 						registers[reg_x] >>= 1;
+						pc += 2;
 					},
 					0x0007 => {
 						let (res, did_underflow) = registers[reg_y].overflowing_sub(registers[reg_x]);
 						registers[15] = if did_underflow {0} else {1};
 						registers[reg_x] = res;
+						pc += 2;
 					},
 					0x000E => {
 						registers[15] = if registers[reg_x] & 0b_1000_0000 == 0b_1000_0000 {1} else {0};
 						registers[reg_x] <<= 1;
+						pc += 2;
 					},
-					_      => panic!()
+					_ => {
+						println!("Unknown 0x8 opcode!");
+						process::exit(1);
+					}
 				}
 			},
 			0x9000 => {
-				let reg_x = extract!(instruction, 0x0F00, 8) as usize;
-				let reg_y = extract!(instruction, 0x00F0, 4) as usize;
+				let reg_x = extract!(instruction, 0x0F00, 8);
+				let reg_y = extract!(instruction, 0x00F0, 4);
 				if registers[reg_x] != registers[reg_y] {
 					pc += 2;
-				}
+				};
+				pc += 2;
 			},
-			0xA000 => mem_addr_reg = instruction & 0x0FFF,
+			0xA000 => {
+				mem_addr_reg = instruction & 0x0FFF;
+				pc += 2;	
+			},
 			0xB000 => pc = (instruction & 0x0FFF) + registers[0] as u16,
 			0xC000 => {
 				let rnd_num = rnd_gen.random::<u8>();
-				let reg_x = extract!(instruction, 0x0F00, 8) as usize; 
+				let reg_x = extract!(instruction, 0x0F00, 8); 
 				registers[reg_x] = rnd_num & ((instruction & 0x00FF) as u8);
+				pc += 2;
 			},
 			0xD000 => {
-				let reg_x = extract!(instruction, 0x0F00, 8) as usize;
-				let reg_y = extract!(instruction, 0x00F0, 4) as usize;
+				let reg_x = extract!(instruction, 0x0F00, 8);
+				let reg_y = extract!(instruction, 0x00F0, 4);
 				let mut x = registers[reg_x] as usize;
 				let mut y = registers[reg_y] as usize;
 				let mut length = instruction & 0x000F; // number of bytes in the sprite, height
@@ -249,44 +260,63 @@ fn main() {
 					y+=1;
 					addr+=1;
 					length -= 1;
-				}
+				};
+				pc += 2;
 			},
 			0xE000 => {
 				match instruction & 0x00FF {
 					0x009E => {
-						let reg = extract!(instruction, 0x0F00, 8) as usize;
+						let reg = extract!(instruction, 0x0F00, 8);                       //  add key handling
 						if check_key_down(registers[reg]) {
 							pc += 2;
 						};
+						pc += 2;
 					},
 					0x00A1 => {
-						let reg = extract!(instruction, 0x0F00, 8) as usize;
+						let reg = extract!(instruction, 0x0F00, 8);                      //  add key handling
 						if !check_key_down(registers[reg]) {
 							pc += 2;
 						};
+						pc += 2;
 					},
-					_      => panic!()
+					_ => {
+						println!("Unknown 0xE opcode!");
+						process::exit(1);	
+					}
 				}
 			},
 			0xF000 => {
-				let reg = extract!(instruction, 0x0F00, 8) as usize;
+				let reg = extract!(instruction, 0x0F00, 8);
 				match instruction & 0x00FF {
-					0x0007 => registers[reg] = delay_reg,
+					0x0007 => {
+						registers[reg] = delay_reg;
+						pc += 2;	
+					},
 					0x000A => {
-						let reg = extract!(instruction, 0x0F00, 8) as usize;
+						let reg = extract!(instruction, 0x0F00, 8);                        // implement await, any key can be pressed and stored
 						let key = wait_for_key();
 						registers[reg] = key;
-
+						pc += 2;
 					},
-					0x0015 => delay_reg = registers[reg],
-					0x0018 => sound_reg = registers[reg],
-					0x001E => mem_addr_reg += registers[reg] as u16,
+					0x0015 => {
+						delay_reg = registers[reg];
+						pc += 2;                                                                        // implement delay timer
+					},
+					0x0018 => {
+						sound_reg = registers[reg];
+						pc += 2;
+					},                                                                              // implement sound timer
+					0x001E => {
+						mem_addr_reg += registers[reg] as u16;
+						pc += 2;
+					},
 					0x0029 => {
-						let value = extract!(instruction, 0x0F00, 8);
+						let value = extract!(instruction, 0x0F00, 8) as u16;
 						mem_addr_reg = value * 5;
+						pc += 2;
 					},
 					0x0033 => {
-						let reg = extract!(instruction, 0x0F00, 8) as usize;
+						let reg = extract!(instruction, 0x0F00, 8);
 						let mut num = registers[reg];
 						let location = mem_addr_reg as usize;
 						memory[location + 2] = num % 10;
@@ -294,6 +324,7 @@ fn main() {
 						memory[location + 1] = num % 10;
 						num /= 10;
 						memory[location] = num % 10;
+						pc += 2;
 					},
 					0x0055 => {
 						let mut addr = mem_addr_reg as usize;
@@ -302,7 +333,8 @@ fn main() {
 							memory[addr] = registers[reg_counter];
 							addr+=1;
 							reg_counter+=1;
-						}
+						};
+						pc += 2;
 					},
 					0x0065 => {
 						let mut addr = mem_addr_reg as usize;
@@ -311,14 +343,21 @@ fn main() {
 							registers[reg_counter] = memory[addr];
 							addr+=1;
 							reg_counter+=1;
-						}
+						};
+						pc += 2;
 					},
-					_      => panic!(),
+					_ => {
+						println!("Unknown 0xF opcode!");
+						process::exit(1);	
+					}
 				}
 			},
-			_      => panic!()
+			_ => {
+				println!("Unknown opcode!");
+				process::exit(1);
+			}
 		};
-		pc+=2;
+
 		count_cycles += 1;
 		println!("{:#04x}", instruction);
 		// break;	
