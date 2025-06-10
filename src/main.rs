@@ -344,14 +344,15 @@ fn main() {
 			if sound_reg > 0 {
 				sound_reg -= 1;
 			};
+			time_elapsed = 0.0;
 		}
 		let mut d = rl_handle.begin_drawing(&rl_thread);
+		d.clear_background(Color::RAYWHITE);
 		for (ri, row) in display.iter().enumerate() {
 			for (pi, pixel) in row.iter().enumerate() {
 				d.draw_rectangle((pi*10) as i32, (ri*10) as i32, 10, 10, if *pixel == 1 { Color::BLACK} else {Color::WHITE});
 			}
 		}
-    d.clear_background(Color::RAYWHITE);
 	};
 }
 
